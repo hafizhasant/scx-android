@@ -13,8 +13,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm lld libelf-dev zlib1g-dev libzstd-dev libseccomp-dev pkg-config protobuf-compiler build-essential git
           rustup toolchain install stable --profile minimal
-          curl -fsSL https://musl.cc/aarch64-linux-musl-cross.tgz | tar -xz -C /opt
-          echo "/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
+          python3 -m pip install --break-system-packages ziglang
+          mkdir -p $HOME/musl-bin
+          printf '#!/bin/sh\nexec python3 -m ziglang cc -target aarch64-linux-musl "$@"\n' > $HOME/musl-bin/aarch64-linux-musl-gcc
+          printf '#!/bin/sh\nexec python3 -m ziglang ar "$@"\n' > $HOME/musl-bin/aarch64-linux-musl-ar
+          chmod +x $HOME/musl-bin/*
+          echo "$HOME/musl-bin" >> $GITHUB_PATH
       - run: git clone --depth 1 --branch "${{ inputs.scx_ref }}" https://github.com/sched-ext/scx.git
       - run: |
           cd scx
