@@ -1,4 +1,4 @@
-name: Build scx_lavd for Android (aarch64, static)
+name: Build scx_lavd for Android (aarch64, musl static)
 on:
   workflow_dispatch:
     inputs:
@@ -9,25 +9,45 @@ jobs:
   build:
     runs-on: ubuntu-24.04-arm
     steps:
-      - run: |
+      - name: Install dependencies
+        run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm lld libelf-dev zlib1g-dev libzstd-dev libseccomp-dev pkg-config protobuf-compiler build-essential git
-          rustup toolchain install stable --profile minimal
           python3 -m pip install --break-system-packages ziglang
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-unknown-linux-musl
+      - name: Musl compiler shims
+        run: |
           mkdir -p $HOME/musl-bin
-          printf '#!/bin/sh\nexec python3 -m ziglang cc -target aarch64-linux-musl \"$(echo \"$@\" | sed \"s/aarch64-unknown-linux-musl/aarch64-linux-musl/g\")\"\n' > $HOME/musl-bin/aarch64-linux-musl-gcc
+          cat > $HOME/musl-bin/aarch64-linux-musl-gcc <<'PY'
+          #!/usr/bin/env python3
+          import subprocess, sys
+          args, skip = [], False
+          for x in sys.argv[1:]:
+              if skip:
+                  skip = False
+                  continue
+              if x in ('-target', '--target'):
+                  skip = True
+                  continue
+              if x.startswith(('-target=', '--target=')):
+                  continue
+              args.append(x)
+          sys.exit(subprocess.call([sys.executable, '-m', 'ziglang', 'cc', '-target', 'aarch64-linux-musl'] + args))
+          PY
           printf '#!/bin/sh\nexec python3 -m ziglang ar "$@"\n' > $HOME/musl-bin/aarch64-linux-musl-ar
           chmod +x $HOME/musl-bin/*
           echo "$HOME/musl-bin" >> $GITHUB_PATH
-      - run: git clone --depth 1 --branch "${{ inputs.scx_ref }}" https://github.com/sched-ext/scx.git
-      - run: |
+      - name: Build scx_lavd
+        run: |
+          git clone --depth 1 --branch "${{ inputs.scx_ref }}" https://github.com/sched-ext/scx.git
           cd scx
-          rustup target add aarch64-unknown-linux-musl; CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc CC_aarch64-unknown-linux-musl=aarch64-linux-musl-gcc AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar RUSTFLAGS="-C target-feature=+crt-static" cargo +stable build --release --target aarch64-unknown-linux-musl -p scx_lavd
-      - run: |
+          CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar RUSTFLAGS="-C target-feature=+crt-static" cargo +stable build --release --target aarch64-unknown-linux-musl -p scx_lavd
+      - name: Collect binary
+        run: |
           mkdir out
           cp scx/target/aarch64-unknown-linux-musl/release/scx_lavd out/
-          file out/scx_lavd
-          sha256sum out/scx_lavd
+          file out/scx_lavd || true
       - uses: actions/upload-artifact@v4
         with:
           name: scx_lavd-aarch64
