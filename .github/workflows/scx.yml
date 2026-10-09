@@ -13,10 +13,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm lld libelf-dev zlib1g-dev libzstd-dev libseccomp-dev pkg-config protobuf-compiler build-essential git
           rustup toolchain install stable --profile minimal
+          curl -fsSL https://musl.cc/aarch64-linux-musl-cross.tgz | tar -xz -C /opt
+          echo "/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
       - run: git clone --depth 1 --branch "${{ inputs.scx_ref }}" https://github.com/sched-ext/scx.git
       - run: |
           cd scx
-          rustup target add aarch64-unknown-linux-musl; RUSTFLAGS="-C target-feature=+crt-static" cargo +stable build --release --target aarch64-unknown-linux-musl -p scx_lavd
+          rustup target add aarch64-unknown-linux-musl; CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar RUSTFLAGS="-C target-feature=+crt-static" cargo +stable build --release --target aarch64-unknown-linux-musl -p scx_lavd
       - run: |
           mkdir out
           cp scx/target/aarch64-unknown-linux-musl/release/scx_lavd out/
